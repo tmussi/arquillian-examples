@@ -20,10 +20,10 @@
         <module>arquillian-tutorial-rinse-repeat</module>
         <module>arquillian-persistence-tutorial</module>
         <module>arquillian-jpa-drone</module>
-        <module>quickstart</module>
+        <!--module>quickstart</module>
         <module>ejb31-gfembedded</module>
         <module>ejb31-jbembedded</module>
-        <module>ejb3-openejb</module>
+        <module>ejb3-openejb</module-->
     </modules>
 
 </project>
