@@ -17,18 +17,12 @@
  */
 package org.arquillian.example;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import javax.inject.Inject;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.CriteriaQuery;
-import javax.persistence.criteria.Root;
+import javax.persistence.Query;
 import javax.transaction.UserTransaction;
 
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -44,47 +38,37 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-/**
- * @author <a href="http://community.jboss.org/people/dan.j.allen">Dan Allen</a>
- */
 @RunWith(Arquillian.class)
 public class GamePersistenceTest {
     @Deployment
     public static Archive<?> createDeployment() {
         // You can use war packaging...
-        WebArchive war = ShrinkWrap.create(WebArchive.class, "test.war")
-            .addPackage(Game.class.getPackage())
-            .addAsResource("test-persistence.xml", "META-INF/persistence.xml")
-            .addAsWebInfResource("jbossas-ds.xml")
-            .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml");
+        WebArchive war = ShrinkWrap.create(WebArchive.class, "test.war").addPackage(Game.class.getPackage())
+                .addAsResource("test-persistence.xml", "META-INF/persistence.xml").addAsWebInfResource("jbossas-ds.xml")
+                .addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml");
 
         // or jar packaging...
-        JavaArchive jar = ShrinkWrap.create(JavaArchive.class)
-            .addPackage(Game.class.getPackage())
-            .addAsManifestResource("test-persistence.xml", "persistence.xml")
-            .addAsManifestResource("jbossas-ds.xml")
-            .addAsManifestResource(EmptyAsset.INSTANCE, "beans.xml");
-        
+        JavaArchive jar = ShrinkWrap.create(JavaArchive.class).addPackage(Game.class.getPackage())
+                .addAsManifestResource("test-persistence.xml", "persistence.xml")
+                .addAsManifestResource("jbossas-ds.xml").addAsManifestResource(EmptyAsset.INSTANCE, "beans.xml");
+
         // choose your packaging here
         return jar;
     }
- 
-    private static final String[] GAME_TITLES = {
-        "Super Mario Brothers",
-        "Mario Kart",
-        "F-Zero"
-    };
-    
+
+    private static final String[] GAME_TITLES = { "Super Mario Brothers", "Mario Kart", "F-Zero" };
+
     @PersistenceContext
     EntityManager em;
-    
+
     @Inject
     UserTransaction utx;
- 
+
     @Before
     public void preparePersistenceTest() throws Exception {
         clearData();
-        insertData();
+        insertGameData();
+        insertReviewData();
         startTransaction();
     }
 
@@ -92,17 +76,48 @@ public class GamePersistenceTest {
         utx.begin();
         em.joinTransaction();
         System.out.println("Dumping old records...");
+        em.createQuery("delete from GameReview").executeUpdate();
         em.createQuery("delete from Game").executeUpdate();
         utx.commit();
     }
 
-    private void insertData() throws Exception {
+    private void insertGameData() throws Exception {
         utx.begin();
         em.joinTransaction();
-        System.out.println("Inserting records...");
+        System.out.println("Inserting games...");
         for (String title : GAME_TITLES) {
             Game game = new Game(title);
             em.persist(game);
+        }
+        utx.commit();
+        // reset the persistence context (cache)
+        em.clear();
+    }
+
+    private void insertReviewData() throws Exception {
+        utx.begin();
+        em.joinTransaction();
+        System.out.println("Inserting reviews...");
+        for (String title : GAME_TITLES) {
+            Query query = em.createQuery("SELECT g FROM Game g WHERE g.title = :title");
+            query.setParameter("title", title);
+            Game game = (Game) query.getSingleResult();
+
+            GameReview review = new GameReview();
+            review.setGameId(game.getId());
+            review.setScore(Math.random());
+            /*
+             * I need to set the game to have it later. This, in particular, i'm not setting
+             * to get assert fail on shouldFindGameReviewWithGame() method
+             */
+            // review.setGame(game);
+            em.persist(review);
+
+            GameReview review2 = new GameReview();
+            review2.setGame(game);
+            review2.setGameId(game.getId());
+            review2.setScore(Math.random());
+            em.persist(review2);
         }
         utx.commit();
         // reset the persistence context (cache)
@@ -113,55 +128,34 @@ public class GamePersistenceTest {
         utx.begin();
         em.joinTransaction();
     }
-    
+
     @After
     public void commitTransaction() throws Exception {
         utx.commit();
     }
-    
+
     @Test
-    public void shouldFindAllGamesUsingJpqlQuery() throws Exception {
-        // given
-        String fetchingAllGamesInJpql = "select g from Game g order by g.id";
-
-        // when
-        System.out.println("Selecting (using JPQL)...");
-        List<Game> games = em.createQuery(fetchingAllGamesInJpql, Game.class).getResultList();
-
-        // then
-        System.out.println("Found " + games.size() + " games (using JPQL):");
-        assertContainsAllGames(games);
-    }
-    
-    @Test
-    public void shouldFindAllGamesUsingCriteriaApi() throws Exception {
-        // given
-        CriteriaBuilder builder = em.getCriteriaBuilder();
-        CriteriaQuery<Game> criteria = builder.createQuery(Game.class);
-                
-        Root<Game> game = criteria.from(Game.class);
-        criteria.select(game);
-        // TIP: If you don't want to use the JPA 2 Metamodel,
-        // you can change the get() method call to get("id")
-        criteria.orderBy(builder.asc(game.get(Game_.id)));
-        // No WHERE clause, which implies select all
-
-        // when
-        System.out.println("Selecting (using Criteria)...");
-        List<Game> games = em.createQuery(criteria).getResultList();
-
-        // then
-        System.out.println("Found " + games.size() + " games (using Criteria):");
-        assertContainsAllGames(games);
-    }
-    
-    private static void assertContainsAllGames(Collection<Game> retrievedGames) {
-        Assert.assertEquals(GAME_TITLES.length, retrievedGames.size());
-        final Set<String> retrievedGameTitles = new HashSet<String>();
-        for (Game game : retrievedGames) {
-            System.out.println("* " + game);
-            retrievedGameTitles.add(game.getTitle());
+    public void shouldFindGameReviewWithGame() {
+        String sql = "SELECT gr FROM GameReview gr JOIN FETCH gr.game";
+        List<GameReview> reviews = em.createQuery(sql, GameReview.class).getResultList();
+        for (GameReview gr : reviews) {
+            Assert.assertNotNull(gr.getGame());
         }
-        Assert.assertTrue(retrievedGameTitles.containsAll(Arrays.asList(GAME_TITLES)));
     }
+
+    @Test
+    public void shouldFindAllGamesAndReviewsJpqlQuery() {
+        String sql = "SELECT g FROM Game g JOIN FETCH g.reviews ORDER BY g.id";
+        List<Game> games = em.createQuery(sql, Game.class).getResultList();
+        Assert.assertEquals(GAME_TITLES.length, games.size());
+        for (Game game : games) {
+            System.out.println("Game: " + game);
+            System.out.println("Reviews on game: " + game.getReviews().size());
+            Assert.assertTrue(game.getReviews().size() > 0);
+            for (GameReview review : game.getReviews()) {
+                System.out.println("Review: " + review);
+            }
+        }
+    }
+
 }

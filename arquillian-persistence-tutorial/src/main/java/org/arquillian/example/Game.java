@@ -16,51 +16,66 @@
  * limitations under the License.
  */
 package org.arquillian.example;
- 
+
 import java.io.Serializable;
+import java.util.List;
 
 import javax.persistence.Entity;
+import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
+import javax.persistence.OneToMany;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
- 
-/**
- * @author <a href="http://community.jboss.org/people/dan.j.allen">Dan Allen</a>
- */
+
 @Entity
 public class Game implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    @Id
+    @GeneratedValue
     private Long id;
     private String title;
- 
-    public Game() {}
- 
+
+    @OneToMany(fetch = FetchType.LAZY, mappedBy = "game")
+    private List<GameReview> reviews;
+
+    public Game() {
+    }
+
     public Game(String title) {
         this.title = title;
     }
- 
-    @Id @GeneratedValue
+
     public Long getId() {
         return id;
     }
- 
+
     public void setId(Long id) {
         this.id = id;
     }
- 
+
     @NotNull
     @Size(min = 3, max = 50)
     public String getTitle() {
         return title;
     }
- 
+
     public void setTitle(String title) {
         this.title = title;
     }
- 
+
+    public List<GameReview> getReviews() {
+        return reviews;
+    }
+
+    public void setReviews(List<GameReview> reviews) {
+        this.reviews = reviews;
+    }
+
     @Override
     public String toString() {
-        return "Game@" + hashCode() +
-            "[id = " + id + "; title = " + title + "]";
+        return "Game [id=" + id + ", title=" + title + "]";
     }
+
 }
